@@ -1,0 +1,105 @@
+### Problem
+@kwdef @concrete struct EconomicModelProblem
+    parameters
+    u0
+    grid
+    prob
+end
+
+### Solution
+struct EconomicModelSolution{N,T}
+    cache::T
+    nsteps::NTuple{N,Int64}
+    resid::NTuple{N,Float64}
+    EconomicModelSolution(cache) = new{length(cache), typeof(cache)}(
+        cache,
+        ntuple(i -> cache[i].nsteps, length(cache)),
+        ntuple(i -> cache[i].resid, length(cache))
+    )
+end
+struct ModelSolution
+    cache
+    nsteps
+    resid
+end
+
+### Cache
+@kwdef @concrete struct EconomicModelCache
+    prob
+    policies =  if prob.u0 isa Function
+        stack(s -> prob.u0(s, prob.parameters), Base.product(prob.grid...)) |>
+        x -> (collect.(eachslice(x; dims=1))...,)
+    else
+        prob.u0
+    end
+    cache = ntuple(length(prob.prob)) do i
+        (; grid, parameters) = prob
+        init(prob.prob[i]; grid=(grid...,), parameters,
+            policies=copy.(policies))
+    end
+    nsteps = zeros(Int64, length(cache))
+    resid = zeros(length(cache))
+end
+init(prob::EconomicModelProblem; kwargs...) =
+    EconomicModelCache(; prob, kwargs...)
+
+### Methods
+init!(c::EconomicModelCache) = init!(c.cache[1])
+function solve!(c::EconomicModelCache; skipinit=false)
+
+    !skipinit && init!(c)
+    for i in 1:length(c.cache)
+        if i > 1
+            copyto!.(c.cache[i].policies, c.cache[i-1].policies)
+        end
+        sol = solve!(c.cache[i])
+        c.nsteps[i] = sol.nsteps
+        c.resid[i] = sol.resid
+    end
+    copyto!.(c.policies, c.cache[end].policies)
+end
+
+### ModelCache
+abstract type ModelCache{S,N,M,F} end
+
+function solve!(cache::T; maxiters=cache.prob.maxiters, abstol=cache.prob.abstol, kwargs...) where {T<:ModelCache}
+    resid = Inf
+    steps = 1
+    for i in 1:maxiters
+        resid = step!(cache; maxiters, abstol, kwargs...)
+        resid < abstol && return ModelSolution(cache, i, resid)
+        steps += 1
+    end
+    ModelSolution(cache, steps, resid)
+end
+
+function init!(cache::T) where {T<:ModelCache}
+    chunks = Iterators.partition(
+        1:prod(length.(cache.grid)),
+        div(prod(length.(cache.grid)), Threads.nthreads())
+    )
+    tasks = map(chunks) do chunk
+        Threads.@spawn _init!(cache, chunk)
+    end
+    fetch.(tasks)
+end
+    
+function step!(cache::T; nsteps=1, kwargs...) where {T<:ModelCache}
+    chunks = Iterators.partition(
+        1:prod(length.(cache.grid)),
+        div(prod(length.(cache.grid)), Threads.nthreads())
+    )
+    resid = 0.0
+    for steps in 1:nsteps
+        _interpolate!.(cache.itp, cache.values)
+        tasks = map(chunks) do chunk
+            Threads.@spawn _step!(cache, chunk)
+        end
+        resid = sum(fetch.(tasks))
+        for (i,values) in enumerate(cache.values)
+            solve!(cache, vec(values), i, cache.prob.f[i].solver;
+                cache.prob.f[i].kwargs..., kwargs...)
+        end
+    end
+    resid
+end

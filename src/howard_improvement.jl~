@@ -1,0 +1,50 @@
+### Problem
+@kwdef @concrete struct HowardImprovementCache
+    f
+    grid
+    callback
+    values
+    policies
+    p
+    abstol = 1e-10
+    maxiters = 10^3
+    resid = Inf
+    nsteps = 1
+end
+
+function HowardImprovementCache(cache::ValueFunctionCache; kwargs..)
+    # (; f, p, grid, values, policies, callback, abstol, maxiters) = cache
+    HowardImprovementCache(; (; f, p, grid, values, policiescallback, abstol, maxiters, kwargs...)...)
+end
+    
+### Step: Howard
+function step!(cache::HowardImprovementCache; nsteps=1)
+    (; f, p, grid, policies, values) = cache
+    
+    for steps in 1:nsteps
+        resid = 0.0
+        @inbounds for (i,s) in enumerate(Base.product(grid...))
+            u_prev = getindex.(policies, (i,))
+            v_prev = getindex.(values, (i,))
+            v = f(u_prev,p,s)
+            resid += mapreduce(abs2,+,v_prev.-v)
+            setindex!.(values, v, i)
+        end
+        cache.nsteps += 1
+        cache.resid = resid
+    end
+    
+end
+
+### Solve
+function solve!(cache::Union{ValueFunctionCache,HowardImprovementCache})
+    (; maxiters, abstol, values, policies, itp, callback) = cache
+    (; resid, nsteps) = cache
+    t = @elapsed while resid > abstol && nsteps < maxiters
+        step!(cache)
+        (; resid, nsteps) = cache
+        callback(cache)
+    end
+    converged = resid < abstol
+    return ValueFunctionSolution(cache, nsteps, resid, converged, t)
+end

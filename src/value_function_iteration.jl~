@@ -1,0 +1,70 @@
+### ValueFunction
+@kwdef @concrete struct ValueFunction
+    v0
+    f
+    itpflags
+    kwargs = (;)
+    solver = missing
+end
+
+### Problem
+@kwdef @concrete struct ValueFunctionProblem
+    f
+    solver
+    maxiters = 10^2
+    abstol = 1e-20
+    kwargs = (u,s,p) -> ()
+end
+
+### Cache
+@kwdef struct ValueFunctionCache{S,N,M,F,P,G,IT,PR} <: ModelCache{S,N,M,F}
+    prob::PR
+    grid::G
+    parameters::P
+    policies::NTuple{N,Array{F,S}}
+    values::NTuple{M,Array{F,S}} = ntuple(length(prob.f)) do i
+        map(Fix{3}(prob.f[i].v0, parameters),
+            zip(policies...),
+            Base.product(grid...))
+    end
+    itp::IT = ntuple(length(values)) do i
+        _interpolate(grid, values[i], prob.f[i].itpflags)
+    end
+end
+init(prob::ValueFunctionProblem; kwargs...) =
+    ValueFunctionCache(; prob, kwargs...)
+
+### Value Function
+function _init!(cache::ValueFunctionCache{S,N,M,F}, chunk) where {S,N,M,F}
+    (; prob, grid, values, policies, parameters) = cache
+    for cidx in CartesianIndices(ntuple(i->length(grid[i]), S))[chunk]
+        state = ntuple(i -> grid[i][cidx[i]], S)
+        u0 = SVector{N,F}(ntuple(i -> policies[i][cidx], N))
+        @inbounds for j in 1:M
+            v = prob.f[j].v0(u0, state, parameters)
+            values[j][cidx] = v
+        end
+    end
+end
+
+function _step!(cache::ValueFunctionCache{S,N,M,F}, chunk) where {S,N,M,F}
+    (; prob, grid, values, policies, parameters, itp) = cache
+    resid = 0.0
+    for cidx in CartesianIndices(ntuple(i->length(grid[i]), S))[chunk]
+        state = ntuple(i -> grid[i][cidx[i]], S)
+        u0 = SVector{N,F}(ntuple(i -> policies[i][cidx], N))
+        kwargs = prob.kwargs(u0, state, parameters; v=itp)
+        (; u, v) = inner_solve(prob.solver; kwargs, p=parameters) do u,p
+            -prob.f[1].f(itp, u, state, p)
+        end
+        @inbounds for j in 1:M
+            resid += abs2(values[j][cidx] - v[j])
+            values[j][cidx] = v[j]
+        end
+        @inbounds for j in 1:N
+            policies[j][cidx] = u[j]
+        end
+    end
+    resid
+end
+

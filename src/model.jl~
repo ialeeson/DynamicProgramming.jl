@@ -1,0 +1,93 @@
+### Init
+function init!(cache::T) where {T<:ModelCache}
+    
+    (; prob, grid, values, policies, parameters, itp) = cache
+
+    chunks = Iterators.partition(CartesianIndices(length.(grid)),
+        div(prod(length.(grid)), Threads.nthreads()))
+    tasks = map(chunks) do chunk
+        Threads.@spawn _init!(prob, grid, values, policies, parameters, chunk)
+    end
+    fetch.(tasks)
+    _interpolate!.(itp, values)
+    cache.nsteps = 0
+    cache.resid = Inf
+
+    return cache
+    
+end
+function init!(cache::T, cache0::S) where {T<:ModelCache,S<:ModelCache}
+    
+    (; prob, grid, values, policies, parameters, itp) = cache
+    prev_policies, prev_values = (cache0.policies, cache0.values)
+
+    chunks = Iterators.partition(CartesianIndices(length.(grid)),
+        div(prod(length.(grid)), Threads.nthreads()))
+    tasks = map(chunks) do chunk
+        Threads.@spawn _init!(prob, grid, values, policies, prev_values, prev_policies, parameters, chunk)
+    end
+    fetch.(tasks)
+    _interpolate!.(itp, values)
+    cache.nsteps = 0
+    cache.resid = Inf
+
+    return cache
+    
+end
+
+### Solve
+function solve!(cache::T; howard=cache.prob.howard, verbose=false) where {T<:ModelCache}
+    
+    # init!(cache)
+    
+    (; maxiters, abstol) = cache
+    while cache.resid > abstol && cache.nsteps < maxiters
+        if verbose
+            @info step!(cache; howard)
+        else
+            step!(cache; howard)
+        end
+    end
+    cache
+    converged = cache.resid < abstol
+    
+    return cache
+    
+end
+
+
+### Step
+function step!(cache::T; nsteps=1, howard=cache.prob.howard) where {T<:ModelCache}
+
+    (; prob, grid, values, policies, parameters, itp) = cache
+    
+    chunks = Iterators.partition(CartesianIndices(length.(grid)),
+        div(prod(length.(grid)), Threads.nthreads()))
+    for steps in 1:nsteps
+        tasks = map(chunks) do chunk
+            Threads.@spawn _step!(prob, grid, values, policies, parameters, itp, chunk)
+        end
+        cache.nsteps += 1
+        cache.resid = sum(fetch.(tasks))
+        _interpolate!.(itp, values)
+        prob.callback(cache)
+    end
+    solve!(howard, cache)
+    
+    return cache
+    
+end
+_step!(prob, grid, values, policies, parameters, itp, chunk) = ()
+
+_init!(prob, grid, values, policies, parameters, chunk) = ()
+function _values(prob, namedgrid, weights, policies, parameters)
+    caches = Any[]
+    push!(caches, init(prob[1]; namedgrid, weights, policies, parameters))
+    for i in 2:length(prob)
+        (; values, policies, grid) = caches[i-1]
+        _values = stack(Fix{4}(prob[i].v0, parameters), zip(values...), zip(policies...), Base.product(grid...)) |> x -> (collect.(eachslice(x; dims=1))...,)
+        cache = init(prob[i]; namedgrid, weights, policies, values=_values, parameters)
+        push!(caches, cache)
+    end
+    return caches
+end
