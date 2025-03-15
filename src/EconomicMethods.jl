@@ -17,15 +17,10 @@ include("value_function_iteration.jl")
 include("iteration.jl")
 include("policy_problem.jl")
 
-# include("economic_model.jl")
-# include("ergodic_distribution.jl")
-# include("steady_state.jl")
-# include("shooting_method.jl")
-
 include("rowenhorst.jl")
 include("printing.jl")
 include("simulation.jl")
-# include("plot.jl")
+
 
 export EulerEquation, ValueFunction, Howard, PolicyProblem, Simulate
 export solve!, step!, init, init!, plot
@@ -34,3 +29,10 @@ export rowenhorst_grid, rowenhorst_matrix
 export FlipSign
 
 end
+
+
+# include("plot.jl")
+# include("economic_model.jl")
+# include("ergodic_distribution.jl")
+# include("steady_state.jl")
+# include("shooting_method.jl")
