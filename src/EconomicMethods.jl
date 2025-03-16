@@ -1,11 +1,14 @@
 module EconomicMethods
 
-using ConcreteStructs, Printf, Setfield, StaticArrays, Random, OffsetArrays
-using GLMakie, NonlinearSolve, Interpolations, ITensors, LinearMaps
-using Optim, OptimizationOptimJL, DifferentiationInterface
+using Compat, ConcreteStructs, Printf, Adapt
+using StaticArrays, OffsetArrays
+using Interpolations, ITensors
+using NonlinearSolve, Optim, OptimizationOptimJL, DifferentiationInterface, CommonSolve
+using Makie, KernelAbstractions
+
 import Base.@kwdef, Base.Fix1, Base.Fix2, Compat.Fix, Base.copy
-import CommonSolve.solve!, CommonSolve.step!, CommonSolve.init, CairoMakie.plot, CommonSolve.solve
-import Statistics.quantile
+import CommonSolve.solve!, CommonSolve.step!, CommonSolve.init, CommonSolve.solve
+import Statistics.quantile, Random.rand!
 
 include("grids.jl")
 include("flags.jl")
@@ -14,8 +17,9 @@ include("value_function_problem.jl")
 include("howard_policy_iteration.jl")
 include("euler_equation_iteration.jl")
 include("value_function_iteration.jl")
-include("iteration.jl")
+include("value_function_iteration_gpu.jl")
 include("policy_problem.jl")
+include("iteration.jl")
 
 include("rowenhorst.jl")
 include("printing.jl")

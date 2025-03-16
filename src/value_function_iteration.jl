@@ -4,6 +4,7 @@
     u0
     v0
     itpflags
+    array_type = Array{Float64}
     solver = missing
     inner_solver = missing
     policy_prob = Howard(; f=f, solver=Iteration(1.0))

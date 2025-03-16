@@ -4,14 +4,30 @@
     grid = (prob.grid...,)
     policies = stack(Base.product(grid...)) do s
         prob.u0(s,parameters)
-    end |> x -> ntuple(j->collect(selectdim(x,1,j)), size(x)[1])
-    values = zeros(prod(length.(grid)), length(prob.itpflags))
+    end |> x -> ntuple(size(x)[1]) do j
+        adapt(prob.array_type, collect(selectdim(x,1,j)))
+    end
+    values = adapt(
+        prob.array_type,
+        zeros(prod(length.(grid)), length(prob.itpflags))
+    )
     itp = ntuple(size(values)[2]) do j
         _interpolate(
-            (prob.grid...,),
+            grid,
             zeros(length.(grid)),
             prob.itpflags[j]
         )
+        # _interpolate(
+        # scale(
+        #     adapt(
+        #         prob.array_type,
+        #         interpolate(
+        #             zeros(length.(grid)),
+        #             prob.itpflags[j]
+        #         )
+        #     ),
+        #     StepRangeLen{Float32, Float32, Float32, Int64}(0f0,10f0,length(grid[1]))
+        # )
     end
     residuals = similar.(policies)
 end

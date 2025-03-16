@@ -1,4 +1,3 @@
-### InterpolationTypes
 __interpolate(grid, values, flags) =
     extrapolate(scale(interpolate(values, flags), grid), Interpolations.Flat())
 
@@ -94,7 +93,6 @@ function _interpolate!(witp::WeightedInterpolation, A, sz)
     tmp1 .= post.(*(tmp0, weights...))
     _interpolate!(itp, ITensors.tensor(tmp1), sz)
 end
-
 
 ### Integral
 @kwdef struct Integral
