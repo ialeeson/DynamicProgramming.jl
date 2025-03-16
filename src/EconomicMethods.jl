@@ -1,6 +1,6 @@
 module EconomicMethods
 
-using Compat, ConcreteStructs, Printf, Adapt
+using Compat, ConcreteStructs, Printf, Adapt, Random
 using StaticArrays, OffsetArrays
 using Interpolations, ITensors
 using NonlinearSolve, Optim, OptimizationOptimJL, DifferentiationInterface, CommonSolve
