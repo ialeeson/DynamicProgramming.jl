@@ -10,9 +10,11 @@ end
     parameters
     caches = ntuple(i->init(prob.probs[i], parameters), length(prob.probs))
     policies = broadcast(caches) do cache
-        flags = ntuple(i->cache.grid[i] isa UnitRange ? NoInterp() : BSpline(Linear()), length(cache.grid))
-        _interpolate.((cache.grid,), cache.policies, (flags,))
-    end |> Tuple
+        cache.policies
+    end
+    #     flags = ntuple(i->cache.grid[i] isa UnitRange ? NoInterp() : BSpline(Linear()), length(cache.grid))
+    #     _interpolate.((cache.grid,), cache.policies, (flags,))
+    # end |> Tuple
     itp = ntuple(i->caches[i].itp, length(caches))
     nsteps = zeros(Int64, length(caches))
     resid = collect(Inf for i in 1:length(caches))
@@ -23,10 +25,10 @@ init(prob::PolicyProblem, parameters) =
 function solve!(c::PolicyProblemCache)
     for (i,cache) in enumerate(c.caches)
         sol = solve!(cache, c.itp, c.policies)
-        for (j,policies) in enumerate(c.policies[i])
-            @views _interpolate!(policies, cache.policies[j],
-                length.(cache.grid))
-        end
+        # for (j,policies) in enumerate(c.policies[i])
+        #     @views _interpolate!(policies, cache.policies[j],
+        #         length.(cache.grid))
+        # end
         c.nsteps[i] = sol.nsteps
         c.resid[i] = sol.resid
     end

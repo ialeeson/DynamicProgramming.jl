@@ -10,14 +10,16 @@ import Base.@kwdef, Base.Fix1, Base.Fix2, Compat.Fix, Base.copy
 import CommonSolve.solve!, CommonSolve.step!, CommonSolve.init, CommonSolve.solve
 import Statistics.quantile, Random.rand!
 
+abstract type ValueFunctionType end
+
 include("grids.jl")
 include("flags.jl")
 include("utilities.jl")
 include("value_function_problem.jl")
 include("howard_policy_iteration.jl")
+include("naive_euler_equation_iteration.jl")
 include("euler_equation_iteration.jl")
 include("value_function_iteration.jl")
-include("value_function_iteration_gpu.jl")
 include("policy_problem.jl")
 include("iteration.jl")
 
@@ -26,7 +28,8 @@ include("printing.jl")
 include("simulation.jl")
 
 
-export EulerEquation, ValueFunction, Howard, PolicyProblem, Simulate
+export EulerEquation, ValueFunction, HowardEquation, PolicyProblem, NaiveEulerEquation
+export Simulate
 export solve!, step!, init, init!, plot
 export Uniform, Rowenhorst, Weighted, Integral, Iteration
 export rowenhorst_grid, rowenhorst_matrix

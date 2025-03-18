@@ -1,0 +1,45 @@
+@kwdef @concrete struct NaiveEulerEquation
+    f
+    grid
+    ee
+    u0
+    v0
+    itpflags
+    solver = missing
+    inner_solver = missing
+    policy_prob = missing
+    kwargs = Returns(())
+    maxiters = 10^2
+    abstol = 1e-10
+end
+
+function _step!(dv, prob::EulerEquation, grid, policies, residuals, itp, parameters, args, chunk)
+    
+    C = CartesianIndices(length.(grid))
+    @inbounds for i in chunk
+        cidx = C[i]
+        state = State(ntuple(j->grid[j][cidx[j]], length(cidx)), cidx)
+        u0 = SVector(ntuple(i -> policies[i][cidx], length(policies)))
+        kwargs = prob.kwargs(u0, state, parameters, args...)
+        us = Iterators.flatten(
+            inner_solve(inner_solver; kwargs, p=parameters) do u,p
+                ee(itp, u, state, p, args...)
+            end for (ee, inner_solver) in zip(prob.ee, prob.inner_solver)
+        )
+        vs = Iterators.flatten(
+            f(itp, u, state, parameters, args...) for f in prob.f
+        )
+        j = 1
+        for v in vs
+            idx = i+(j-1) * prod(length.(grid))
+            dv[idx] = v
+            j += 1
+        end
+        j = 1
+        for u in us
+            policies[j][cidx] = u
+            j += 1
+        end
+    end
+    
+end

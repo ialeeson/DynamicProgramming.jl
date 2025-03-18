@@ -11,7 +11,7 @@ struct FlipSign{F} <: Function
     FlipSign(f::F) where {F} = new{F}(f)
     FlipSign(f::Type{F}) where {F} = new{Type{F}}(f)
 end
-(f::FlipSign)(x) = -f.f(x)
+(f::FlipSign)(x...) = -f.f(x...)
 
 function diff!(x,y,f)
     if length(CartesianIndices(y)) ≤ Threads.nthreads()
@@ -38,7 +38,7 @@ function diff!(x,y,f)
 end
 
 function inner_solve(f::F, solver::T; kwargs, p)  where {F,T<:Optim.UnivariateOptimizer}
-    g = Fix2(f,p)
+    g = FlipSign(Fix2(f,p))
     (; lb, ub) = kwargs
     if ub ≤ lb
         (; u=lb, v=-g(lb))
@@ -51,18 +51,19 @@ end
 function inner_solve(f::F, solver::T; kwargs, p)  where {F,T<:Optim.IPOptimizer}
     (; cons, lcons, ucons, lb, ub, u0) = kwargs
     fun = OptimizationFunction(
-        f,
         DifferentiationInterface.SecondOrder(
             Optimization.AutoForwardDiff(),
             Optimization.AutoForwardDiff()
         );
         cons
-    )
+    ) do u,p
+        -f(u,p)
+    end
     prob = OptimizationProblem(fun, u0, p;
         lcons, ucons, lb, ub)
     sol = solve(prob, solver)
     if isnan(sol.objective)
-        (; u=u0, v=-f(u0,p))
+        (; u=u0, v=f(u0,p))
     else
         (; u=sol.u, v=-sol.objective)
     end
@@ -71,13 +72,28 @@ end
 function inner_solve(ee::F, solver::T; kwargs, p)  where {F,T<:BracketingNonlinearSolve.AbstractBracketingAlgorithm}
     (; lb, ub) = kwargs
     eelb, eeub = (ee(lb,p), ee(ub,p))
-    (; u, r) = if eelb < 0.0
-        (; u=lb, r=eelb)
-    elseif eeub > 0.0
-        (; u=ub, r=eeub)
+    if eelb > 0.0
+        (; u=lb, v=eelb)
+    elseif eeub < 0.0
+        (; u=ub, v=eeub)
     else
         prob = IntervalNonlinearProblem{false}(ee,(lb[1],ub[1]),p)
         sol = solve(prob, solver)
-        (; u=sol.u, r=sol.resid)
+        (; u=sol.u, v=sol.resid)
+    end
+end
+
+function dispatch_multi!(f!::F, res, args...; l) where F
+    chunks = Iterators.partition(1:l, div(l, Threads.nthreads()))
+    tasks = map(chunks) do chunk
+        Threads.@spawn f!(res, args..., chunk)
+    end
+    fetch.(tasks)
+end
+
+function _interpolate!(itp, v; sz)
+    l = prod(sz)
+    for (i,itp) in enumerate(itp)
+        @views __interpolate!(itp, v[1+(i-1)*l:i*l], sz)
     end
 end

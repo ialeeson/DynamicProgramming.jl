@@ -1,5 +1,5 @@
 __interpolate(grid, values, flags) =
-    extrapolate(scale(interpolate(values, flags), grid), Interpolations.Flat())
+    extrapolate(scale(interpolate(values, flags), grid), Interpolations.Line())
 
 _interpolate(grid, values, flags) = __interpolate(grid, values, flags)
 function _interpolate(grid, values, flags::Tuple)
@@ -13,18 +13,18 @@ function _interpolate(grid, values, flags::Tuple)
     __interpolate(grid, values, flags)
 end
 _interpolate(grid, values, flags::Gridded) =
-    extrapolate(interpolate(grid, values, flags), Linear())
+    extrapolate(interpolate(grid, values, flags), Interpolations.Line(), Interpolations.Flat())
 
-_interpolate!(itp, A, sz) = _interpolate!(
+__interpolate!(itp, A, sz) = __interpolate!(
     Interpolations.itpflag(itp),
     Interpolations.coefficients(itp),
     A,
     sz
 )
-_interpolate!(itp, coefs, A, sz) = copyto!(coefs,A)
-_interpolate!(itp::Interpolations.Extrapolation, A, sz) =
-    _interpolate!(itp.itp, A, sz)
-function _interpolate!(flags, coefs::T, A::R, sz) where {T<:Interpolations.OffsetArray,R<:AbstractArray}
+__interpolate!(itp, coefs, A, sz) = copyto!(coefs,A)
+__interpolate!(itp::Interpolations.Extrapolation, A, sz) =
+    __interpolate!(itp.itp, A, sz)
+function __interpolate!(flags, coefs::T, A::R, sz) where {T<:Interpolations.OffsetArray,R<:AbstractArray}
 
     for (i,cidx) in enumerate(CartesianIndices(sz))
         coefs[cidx] = A[i]
@@ -65,6 +65,7 @@ end
     tmp1
 end
 @inline (i::WeightedInterpolation)(x...) = i.itp(x...)
+Base.getindex(i::WeightedInterpolation, cidx::CartesianIndex) = i.itp[cidx]
 
 function _interpolate(grid, _values, flags::Weighted)
     pre = flags.pre
@@ -87,11 +88,11 @@ function _interpolate(grid, _values, flags::Weighted)
     )
     WeightedInterpolation(; pre, post, itp, weights, dims, tmp0, tmp1)
 end
-function _interpolate!(witp::WeightedInterpolation, A, sz)
+function __interpolate!(witp::WeightedInterpolation, A, sz)
     (; pre, post, itp, tmp0, tmp1, weights) = witp
     map!(pre, ITensors.tensor(tmp0), A)
     tmp1 .= post.(*(tmp0, weights...))
-    _interpolate!(itp, ITensors.tensor(tmp1), sz)
+    __interpolate!(itp, ITensors.tensor(tmp1), sz)
 end
 
 ### Integral
@@ -117,4 +118,4 @@ function _interpolate(grid, values, int::Integral)
     itp = _interpolate(grid, values, itpflags)
     IntegralInterpolation(nodes, weights, itp)
 end
-_interpolate!(itp::IntegralInterpolation, A, sz) = _interpolate!(itp.itp, A, sz)
+__interpolate!(itp::IntegralInterpolation, A, sz) = __interpolate!(itp.itp, A, sz)

@@ -59,3 +59,10 @@
 #         @printf io "Err: %e\n" resid
 #     end
 # end
+
+function Base.show(io::IO, s::IterationSolution)
+    for (nsteps, resid) in zip(s.nsteps, s.resid)
+        @printf io "\n%d Steps; " nsteps
+        @printf io "Err: %e" resid
+    end
+end

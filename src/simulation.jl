@@ -26,7 +26,7 @@ function Base.setindex!(s::SimulationCache, x::Float64, i, t)
     else
         idx = searchsortedfirst(grid,x)
         δ = (x-grid[idx-1])/(grid[idx]-grid[idx-1])
-        rand() < δ ? idx : idx-1
+        δ < 0.5 ? idx-1 : idx
     end
 end
 
